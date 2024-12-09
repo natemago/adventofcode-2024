@@ -8,3 +8,5 @@ AdventOfCode 2024 solutions
 * [Day 5 - Print Queue :printer: :paw_prints:](./day-5-print-queue/)
 * [Day 6 - Guard Gallivant :walking: :footprints:](./day-6-guard-gallivant/)
 * [Day 7 - Bridge Repair :bridge_at_night: :black_cat:](./day-7-bridge-repair/)
+* Day 8
+* [Day 9 - Disk Fragmenter :floppy_disk: :snail:](./day-9-disk-fragmenter/)
