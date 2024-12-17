@@ -11,4 +11,4 @@ AdventOfCode 2024 solutions
 * Day 8
 * [Day 9 - Disk Fragmenter :floppy_disk: :snail:](./day-9-disk-fragmenter/)
 * [Day 10 - Hoof it :world_map: :volcano:](./day-10-hoof-it/)
-
+* [Day 11 - Plutonian Pebbles :ringed_planet: :rock:](./day-11-plutonian-pebbles/)
