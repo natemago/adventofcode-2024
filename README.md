@@ -15,3 +15,4 @@ AdventOfCode 2024 solutions
 * [Day 12 - Garden Groups :house_with_garden: :farmer:](./day-12-garden-groups/)
 * [Day 13 - Claw Contraption :paw_prints: :turkey:](./day-13-claw-contraption/)
 * [Day 14 - Restroom Redoubt :robot: :robot:](./day-14-restroom-redoubt/)
+* [Day 15 - Warehouse Woes :fish: :robot:](./day-15-warehouse-woes/)
