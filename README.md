@@ -18,3 +18,4 @@ AdventOfCode 2024 solutions
 * [Day 15 - Warehouse Woes :fish: :robot:](./day-15-warehouse-woes/)
 * [Day 16 - Reindeer Maze :deer: :hole:](./day-16-reindeer-maze/)
 * [Day 17 - Chronospatial Computer :computer: :abacus:](./day-17-chronospatial-computer/)
+* [Day 18 - RAM Run :santa: :abacus:](./day-18-ram-run/)
