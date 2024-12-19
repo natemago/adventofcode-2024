@@ -17,3 +17,4 @@ AdventOfCode 2024 solutions
 * [Day 14 - Restroom Redoubt :robot: :robot:](./day-14-restroom-redoubt/)
 * [Day 15 - Warehouse Woes :fish: :robot:](./day-15-warehouse-woes/)
 * [Day 16 - Reindeer Maze :deer: :hole:](./day-16-reindeer-maze/)
+* [Day 17 - Chronospatial Computer :computer: :abacus:](./day-17-chronospatial-computer/)

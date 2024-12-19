@@ -54,7 +54,6 @@ def run_program(registers, program, at_most_output=None):
             pc += 2
         elif opcode == 5:
             output.append(get_combo_value(operand) % 8)
-            #print('out>', get_combo_value(operand) % 8)
             pc += 2
             if at_most_output is not None and len(output) >= at_most_output:
                 break
@@ -70,170 +69,108 @@ def run_program(registers, program, at_most_output=None):
     return output
 
 
-def compare(a, b):
-    if len(a) > len(b):
-        #print('True(1)')
-        return 1
-    if len(b) > len(a):
-        #print('False(2)')
-        return -1
-    for i in range(len(a)):
-        aa = a[len(a) - i - 1]
-        bb = b[len(b) - i - 1]
-        #print('compariring ', aa, ' with ', bb, ' at ', i, ' ', len(b) - i - 1)
-        if aa != bb:
-            if aa > bb:
-                return 1
-            else:
-                return -1
-    return 0
-
-
 def part1(registers, program):
     out = run_program(registers, program)
     return ','.join([str(i) for i in out])
 
 
-
 def part2(registers, program):
-    start = 0
-    end = int('9'*(len(program)-1))
-    while True:
-        
-        i = (start + end) // 2
-        
-        regs = {}
-        regs.update(registers)
-        regs['A'] = i
-        output = run_program(regs, program)
-        
-        if output == program:
-            return start
-        
-        print(start, ' | ', i,  ' | ', end)
-        print(output)
-        print(program)
-        print('output > program=', compare(output, program))
+    # for i in range(100):
+    #     output = run_program({
+    #             'A': i,
+    #             'B': 0,
+    #             'C': 0,
+    #         }, program)
+    #     print('i=', i)
+    #     print(output)
+    #     print(program)
+    #     print('---')
+    '''
+    Observations from the output:
+        i= 0
+        [3]
+        [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]
+        ...
+            i= 7
+        [5]
+        [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]
+        ---
+        i= 8
+        [3, 2] <- one more digit here...
+        [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]
+        ---
+        ...
+        i= 63
+        [3, 5]
+        [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]
+        ---
+        i= 64
+        [1, 3, 2]
+        [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]
+        ---
+        ...
 
+    1) The output seems to "jump" i.e get one more digit at exactly powers of 8 - so at 8**1 gets 2 digits, at 8^2 gets 3 digits etc.
+       This would mean that our number should be at least 8^15 and at most 7*(8^15).
+    2) The digit at location N (corresponds to 8^(N-1)) only changes for multiples of 8^(N-1) - in between it remains the same.
+    3) From 1 and 2, we can tell that any number N such that (k-1)*(8^d) < N < k*(8^d) will not affect the digit at position d+1 - i.e 
+       once we find a number for the (d+1) position, we can try with any number i in [0, 7] as i*(8^d) and the digit after it will not be affected.
+       We can have more than one possible hit for i - for example we can have i=1 and i=5 to produce the same digit at the d-th position.
 
-        if gt(output, program) >= 0:
-            end = i
-        else:
-            start = i
-        
-        if abs(start - end) < 2:
-            print('OK, stopping here...')
-            break
-        print(' - - - - - ')
+    So we can start by finding possible coefficients (i) for the last position first, then for each of those, we can try other numbers for the previous
+    digit recursively. Note that the numbers at position d do NOT affect numbers at position > d, but DO affect numbers before it. 
+    '''
     
-    for i in range(start - 1000000, end + 1000000):
-        regs = {}
-        regs.update(registers)
-        regs['A'] = i
-        output = run_program(regs, program)
-        if output == program:
-            return i
-        if i % 1000 == 0:
-            print(i)
-            print('o=', output)
-            print('p=', program)
-            print(' - - - ')
-
-    #print(gt([3, 3, 3, 7, 3, 1, 1, 6, 0, 3, 2, 7, 3, 5, 2, 5], [2, 4, 1, 5, 7, 5, 1, 6, 0, 3, 4, 1, 5, 5, 3, 0]))
-
-def to_dec(tri):
-    r = 0
-    for i in range(len(tri)):
-        r += (8**i)*tri[i]
-    return r
-
-
-def part2(registers, program):
-    coeff = []
-    for i in range(to_dec(program) - 100000, to_dec(program) + 100000):
-        output = run_program({
-            'A': i+1,
-            'B': 0,
-            'C': 0,
-        },program)
-        #print(i+1, ': ', to_dec(output), '(', to_dec(program), ')')
-        coeff.append(to_dec(output)/(i+1))
-        #print(' >', coeff[-1])
     
-    avg = sum(coeff)/len(coeff)
-    variance = sum([(avg - v)**2 for v in coeff])/len(coeff)
-    from math import sqrt
-    std_dev = sqrt(variance)
-    print('Avg coeff:', sum(coeff)/len(coeff))
-    print('Variance:', variance)
-    print('STD Dev:', std_dev)
+    
+    d = len(program) - 1
+    q = []
 
-
-    guess = int(to_dec(program)/avg)
-    print('Guess:', guess)
-    deviation = int(guess*std_dev)
-    print('Offset:', deviation)
-    for i in range(guess - deviation - 1000, guess + deviation + 1000):
+    for i in range(8):
         output = run_program({
-            'A': i,
-            'B': 0,
-            'C': 0,
-        },program)
-        if to_dec(output) == to_dec(program):
-            return i
-        if i % 10000 == 0:
-            print(' - - - - ')
-            print(output)
-            print(program)
+                'A': i*(8**d),
+                'B': 0,
+                'C': 0,
+            }, program)
+        # print(i)
+        # print(output)
+        # print(program)
+        # print('---')
+        if len(output) != len(program):
+            continue
+        if output[d] == program[d]:
+            q.append((d, i, i*(8**d)))
 
-# def part2(registers, program):
-#     guess = [0 for i in range(len(program))]
-#     d = 0
-#     stack = [(d, 0)]
-#     while len(stack):
-#         d, i = stack[-1]
-#         guess[-d-1] = i
-#         output = run_program({
-#             'A': to_dec(guess),
-#             'B': 0,
-#             'C': 0,
-#         },program)
-#         print(' - - - - ')
-#         print('d:', d)
-#         print('Guess:   ', guess)
-#         print('Output:  ', output)
-#         print('Program: ', program)
-#         input()
-#         if output[-d-1:] == program[-d-1:]:
-#             if d < len(program)-1:
-#                 stack.pop()
-#                 stack.append((d+1, 0))
-#                 print('Stack:', stack)
-#                 continue
-#         if i + 1 == 8:
-#             if d < len(program)-1:
-#                 stack.append((d+1, 0))
-#         else:
-#             stack.append((d, i+1))
-#         print('Stack:', stack)
-       
-#     print(to_dec(guess))
-#     return to_dec(guess)
+    min_n = None
 
-def part2(registers, program):
-    guess = [0 for i in range(len(program) + 5)]
-    for i in range(500, 520):
-        #guess[4] = i
-        output = run_program({
-            'A': i,
-            'B': 0,
-            'C': 0,
-        }, program)
-        #print('Guess:   ', guess)
-        print(i)
-        print('Output:  ', output)
-        print('Program: ', program)
-        input()
+    while len(q):
+        d, i, n = q.pop()
+        if d == 0:
+            if min_n is None or n < min_n:
+                min_n = n
+            continue
+        for j in range(8):
+            output = run_program({
+                'A': n + int(j*(8**(d-1))),
+                'B': 0,
+                'C': 0,
+            }, program)
+            if len(output) != len(program):
+                continue
+            if output[(d-1)] == program[(d-1)]:
+                q.append((d-1, j, n + int(j*(8**(d-1)))))
+    
+
+    # output = run_program({
+    #     'A': min_n,
+    #     'B': 0,
+    #     'C': 0,
+    # }, program)
+    # print(output)
+    # print(program)
+    # print('---')
+    return min_n
+
 
 print('Part 1:', part1(*read_input('input')))
 print('Part 2:', part2(*read_input('input')))
