@@ -23,3 +23,4 @@ AdventOfCode 2024 solutions
 * [Day 20 - Race condition :construction:](./day-20-race-condition/)
 * [Day 21 - Keypad Conundrum :construction:](./day-21-keypad-conundrum/)
 * [Day 22 - Monkey Market :monkey: :banana:](./day-22-monkey-market/)
+* [Day 23 - LAN Party :computer: :computer:](./day-23-lan-party/)
