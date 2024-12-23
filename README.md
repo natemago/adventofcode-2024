@@ -20,3 +20,6 @@ AdventOfCode 2024 solutions
 * [Day 17 - Chronospatial Computer :computer: :abacus:](./day-17-chronospatial-computer/)
 * [Day 18 - RAM Run :santa: :abacus:](./day-18-ram-run/)
 * [Day 19 - Linen Layout :scarf: :necktie:](./day-19-linen-layout/)
+* [Day 20 - Race condition :construction:](./day-20-race-condition/)
+* [Day 21 - Keypad Conundrum :construction:](./day-21-keypad-conundrum/)
+* [Day 22 - Monkey Market :monkey: :banana:](./day-22-monkey-market/)
