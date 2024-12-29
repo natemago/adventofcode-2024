@@ -28,33 +28,7 @@ def find_button(bc, keypad):
     raise Exception('NOT FOUND')
 
 
-def find_all_shortest(btn, keypad):
-    btn_pos = find_button(btn, keypad)
-    q = [(btn_pos, [])]
-    seen = {}
-
-    while len(q):
-        (x, y), sequence = q[0]
-        q = q[1:]
-        if seen.get((x, y)) is not None:
-            continue
-        seen[(x, y)] = sequence
-        for dx, dy, cc in ((-1, 0, '<'), (1, 0, '>'), (0, 1, 'v'), (0, -1, '^')):
-            xx, yy = x+dx, y+dy
-            if keypad[yy][xx] == '#':
-                continue
-            q.append(((xx, yy), sequence + [cc]))
-    
-    result = {}
-
-    for pos, seq in seen.items():
-        x, y = pos
-        result[keypad[y][x]] = seq + ['A']
-
-    return result
-
-
-def find_all_shortest_1(a, b, keypad):
+def find_all_shortest(a, b, keypad):
     a_pos = find_button(a, keypad)
     b_pos = find_button(b, keypad)
     q = [(a_pos, [], set())]
@@ -82,73 +56,77 @@ def find_all_shortest_1(a, b, keypad):
 
     for p in paths:
         if p[0] == best:
-            result.append(p + ['A'])
+            result.append(''.join(p[1]) + 'A')
 
     return result
 
-
-def shortest_cross_prod(codes, keypad):
-    shortest = {}
-    for c in codes:
-        shortest[c] = find_all_shortest_1(c, keypad)
-    return shortest
-
-
-def code_numerical_to_directional(code, num_keypad_shortest):
-    pos = 'A'
-    result = []
-    for c in code:
-        result += num_keypad_shortest[pos][c]
-        pos = c
-    return result
-
-def code_numerical_to_directional(code, num_keypad_shortest):
-    q = [('A', 0, [])]
-
-    sequences = []
-
-    while len(q):
-        frm, i, sequence = q.pop()
-        nxt = code[i]
-
-        if i == len(code) - 1:
-            sequences.append(sequence)
-            continue
-
-        for ss in num_keypad_shortest[frm][nxt]:
-            q.append((ss, i+1, sequence + ss))
-    
+def get_sequences_num_keypad(keypad):
+    sequences = {}
+    for a in '0123456789A':
+        for b in '0123456789A':
+            sequences[(a, b)] = find_all_shortest(a, b, keypad)
     return sequences
 
 
-def code_directional_to_directional(code, dir_keypad_shortest):
-    pos = 'A'
-    result = []
-    for c in code:
-        result += dir_keypad_shortest[pos][c]
-        pos = c
-    return result
+def get_sequences_dir_keypad(keypad):
+    sequences = {}
+    for a in '<>^vA':
+        for b in '<>^vA':
+            sequences[(a, b)] = find_all_shortest(a, b, keypad)
+    return sequences
+
+
+
+def solve_for(codes, num_directional_keypads):
+    # Disgusting recursive solution
+    num_seq = get_sequences_num_keypad(num_keypad)
+    dir_seq = get_sequences_dir_keypad(dir_keypad)
+    total = 0
+
+    cache = {}
+    def sequence_length(code, depth):
+        if (code, depth) in cache:
+            return cache[(code, depth)]
+        p = 'A'
+        best_code_len = 0
+        for c in code:
+            per_move = []
+            for s in dir_seq[(p, c)]:
+                per_move.append((len(s), s))
+            best_len = min(per_move, key=lambda n: n[0])[0]
+            if depth > 0:
+                best_for_next = []
+                for next_s in per_move:
+                    if next_s[0] == best_len:
+                        best_for_next.append(sequence_length(next_s[1], depth - 1))
+                best_code_len += min(best_for_next)
+            else:
+                best_code_len += best_len
+            p = c
+        cache[(code, depth)] = best_code_len
+
+        return best_code_len
+    
+    for code in codes:
+        p = 'A'
+        code_length = 0
+        for c in code:
+            lengths = []
+            for seq in num_seq[(p, c)]:
+                lengths.append(sequence_length(seq, num_directional_keypads - 2)) # One keypad for the first transformation and one for me.
+            p = c
+            code_length += min(lengths)
+        total += int(code[0:-1].lstrip('0')) * code_length
+
+    return total
 
 def part1(codes):
-    # num_keypad_shortest = shortest_cross_prod('0123456789A', num_keypad)
-    # dir_keypad_shortest = shortest_cross_prod('<>^vA', dir_keypad)
-
-    # total = 0
-    # for code in codes:
-    #     r = code_numerical_to_directional(code, num_keypad_shortest)
-    #     print('On num:', ''.join(r))
-    #     r = code_directional_to_directional(r, dir_keypad_shortest)
-    #     print('On d1:', ''.join(r))
-    #     r = code_directional_to_directional(r, dir_keypad_shortest)
-    #     print('Final:', ''.join(r))
-    #     print(code,':', ''.join(r))
-    #     a = int(code[:-1].lstrip('0'))
-    #     l = len(r)
-    #     print('a=', a, 'l=', l)
-    #     break
-    # return total
-    r = find_all_shortest_1('1', '9', num_keypad)
-    print(r)
+    return solve_for(codes, 3)
 
 
-print('Part 1:', part1(read_input('test_input')))
+def part2(codes):
+    return solve_for(codes, 26)
+
+
+print('Part 1:', part1(read_input('input')))
+print('Part 2:', part2(read_input('input')))
