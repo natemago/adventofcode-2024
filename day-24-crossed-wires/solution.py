@@ -1,589 +1,483 @@
-import re
+from random import randint
+from itertools import combinations
 
 def read_input(fn):
+    global id_seq
+    id_seq = 0
+    circuit = Circuit()
+    inputs_read = False
     with open(fn) as f:
-        ast = {}
         for line in f:
-            if line.strip():
-                if '->' in line:
-                    p1, res = line.split('->')
-                    a, op, b = p1.strip().split()
-                    ast[res.strip()] = ('expr', a, op, b)
-                elif ':' in line:
-                    wire, value = line.split(':')
-                    ast[wire.strip()] = ('value', int(value.strip()))
+            line = line.strip()
+            if not line:
+                if not inputs_read:
+                    inputs_read = True
+                continue
+        
+            if not inputs_read:
+                # read inputs
+                inp, value = line.split()
+                w = InputWire(inp[:-1], int(value))
+                if w.t == 'x':
+                    circuit.inpx.append(w)
                 else:
-                    raise Exception(line)
-        return ast
+                    circuit.inpy.append(w)
+                circuit.wires[w.name] = w
+            else:
+                p1, p2 = line.split('->')
+                p1, p2 = p1.strip(), p2.strip()
+                out_wire = circuit.wires[p2] if p2 in circuit.wires else InputWire(p2) if p2.startswith('z') else Wire(p2)
+                in1_name, gate_op, in2_name = p1.split()
+                in1_wire = circuit.wires[in1_name] if in1_name in circuit.wires else Wire(in1_name)
+                in2_wire = circuit.wires[in2_name] if in2_name in circuit.wires else Wire(in2_name)
+                gate = Gate(gate_op)
+                in1_wire.gates.add(gate)
+                in2_wire.gates.add(gate)
+                out_wire.gates.add(gate)
+                gate.in1 = in1_wire
+                gate.in2 = in2_wire
+                gate.out = out_wire
 
+                if isinstance(out_wire, InputWire):
+                    circuit.outz.append(out_wire)
+                circuit.wires[in1_wire.name] = in1_wire
+                circuit.wires[in2_wire.name] = in2_wire
+                circuit.wires[out_wire.name] = out_wire
+                circuit.gates.add(gate)
 
-def solve_for(wire, ast):
-    val = ast[wire]
-    if val[0] == 'value':
-        return val[1]
-    _, a, op, b = val
-    a = solve_for(a, ast)
-    b = solve_for(b, ast)
-    if op == 'AND':
-        return 1 if a == 1 and b == 1 else 0
-    elif op == 'OR':
-        return 1 if a == 1 or b == 1 else 0
-    elif op == 'XOR':
-        return 1 if a !=  b else 0
-    raise Exception('Invalid operation: ' + op)
+    circuit.inpx = sorted(circuit.inpx, key=lambda w: w.name)
+    circuit.inpy = sorted(circuit.inpy, key=lambda w: w.name)
+    circuit.outz = sorted(circuit.outz, key=lambda w: w.name)
+    return circuit
 
-def part1(ast):
-    result = []
-    for key in ast.keys():
-        if key.startswith('z'):
-            result.append((key, solve_for(key, ast)))
-    
-    result = sorted(result)
-    total = 0
-    for i, (_, v) in enumerate(result):
-        total += v*(2**i)
-    return total
+OPS = {
+    'AND': lambda a, b: a & b,
+    'OR': lambda a, b: a | b,
+    'XOR': lambda a, b: a ^ b,
+}
 
-def get_reachable(n, ast):
-    q = [n]
-    reached = set()
-
-    while len(q):
-        n = q[0]
-        q = q[1:]
-        if n in reached:
-            continue
-        reached.add(n)
-        if n not in ast:
-            continue
-        if ast[n][0] == 'expr':
-            _, a, _, b = ast[n]
-            q.append(a)
-            q.append(b)
-    return reached
-
-def part2(ast):
-    c = 0
-    for key in ast.keys():
-        if key[0] in 'xyz':
-            pass
-        else:
-            c+=1
-    return c
-
-def run_with(x, y, ast):
-    a = {}
-    a.update(ast)
-    for k in a.keys():
-        if k[0] == 'x':
-            bit = int(k[1:].lstrip('0') or 0)
-            bit = x & (0x1<<bit)
-            a[k] = ('value', bit)
-        elif k[0] == 'y':
-            bit = int(k[1:].lstrip('0') or 0)
-            bit = y & (0x1<<bit)
-            a[k] = ('value', bit)
-    
-    result = []
-    for k in a.keys():
-        if k[0] == 'z':
-            result.append((k, solve_for(k, a)))
-    result = sorted(result)
-    r = 0
-    for i, bit in enumerate(result):
-        r += (2**i) * bit[1]
-    return r, result
-    
-
-def get_z_bit(b, ast):
-    for n in ast.keys():
-        if n.startswith('z'):
-            if int(n[1:].lstrip('0') or 0) == b:
-                return n
-
-def test_bit(b, ast):
-    for x, y, expected_bits in ((0, 0, [0]), (0, 1, [1]), (1, 0, [1]), (1, 1, [0, 1])):
-        result, _ = run_with(x*(2**b), y*(2**b), ast)
-        #print('Test: x=', x*(2**b), '; y=', y*(2**b), '; result=', result)
-        zb = get_z_bit(b, ast)
-        if result & (2**b) != expected_bits[0]*(2**b):
-            #print(' - fail [1]')
-            return False
-        if len(expected_bits) > 1:
-            zb = get_z_bit(b+1, ast)
-            if zb is not None and result & (2**(b+1)) != expected_bits[1]*(2**(b+1)):
-                # print(' - fail [2]')
-                # print(zb)
-                # print(result & (2**(b+1)))
-                return False
-    return True
-
-
-def swap_and_test(bit, a, b, ast):
-    a = {}
-    a.update(ast)
-
-    t = a[b]
-    a[b] = a[a]
-    a[a] = t
-    try:
-        return test_bit(bit, a)
-    except:
-        return False
-# --------
-class V:
-
-    def __init__(self, id_, label, type_, value=None):
-        self.id = id_
-        self.label = label
-        self.type = type_
-        self.in_edges = []
-        self.out_edges = []
+class Wire:
+    def __init__(self, name, value=None):
+        self.name = name
         self.value = value
+        self.gates = set()
     
     def __str__(self):
-        return 'V({})'.format(self.id)
+        return self.name
     
     def __repr__(self):
         return self.__str__()
 
-class E:
+class InputWire(Wire):
 
-    def __init__(self, id_, label, v1, v2):
-        self.id = id_
-        self.label = label
-        self.v1 = v1
-        self.v2 = v2
+    def __init__(self, name, value=None):
+        super(InputWire, self).__init__(name, value)
+        self.bit = int(name[1:])
+        self.t = name[0]
 
-class G:
 
-    def __init__(self):
-        self.vertices = {}
-        self.edges = {}
+id_seq = 0
+
+
+class Gate:
+
+    def __init__(self, op):
+        global id_seq
+        self.id = id_seq
+        id_seq += 1
+        self.op = op
+        self.in1 = None
+        self.in2 = None
+        self.out = None
     
-    def add_vertex(self, v):
-        if v.id in self.vertices:
-            raise Exception('Vertex already in graph')
-        self.vertices[v.id] = v
+    def __str__(self):
+        return self.op + str(self.id)
     
-    def add_edge(self, v1, v2, id_, label):
-        if (v1.id, v2.id) in self.edges:
-            raise Exception('Edge already in graph')
-        edge = E(id_, label, v1, v2)
+    def __repr__(self):
+        return self.__str__()
+    
+    def run(self):
+        if self.in1.value is None:
+            for gate in self.in1.gates:
+                if self.in1.value is not None:
+                    # already set
+                    continue
+                if gate == self:
+                    continue
+                if gate.out == self.in1:
+                    self.in1.value = gate.run()
+        if self.in2.value is None:
+            for gate in self.in2.gates:
+                if self.in2.value is not None:
+                    # already set
+                    continue
+                if gate == self:
+                    continue
+                if gate.out == self.in2:
+                    self.in2.value = gate.run()
+        if self.in1.value is not None and self.in2.value is not None:
+            v =  OPS[self.op](self.in1.value, self.in2.value)
+            return v
         
-        if v1.id not in self.vertices:
-            raise Exception('Vertex {} not in graph'.format(v1.id))
-        if v2.id not in self.vertices:
-            raise Exception('Vertex {} not in graph'.format(v2.id))
+        raise Exception('WOOPS')
 
-        v1.out_edges.append(edge)
-        v2.in_edges.append(edge)
-        self.edges[(v1.id, v2.id)] = edge
+
+class Circuit:
+    def __init__(self):
+        self.inpx = []
+        self.inpy = []
+        self.outz = []
+        self.wires = dict()
+        self.gates = set()
     
-    def to_dot_file(self, fn):
+    def run(self, lbit=0, hbit=None):
+        hbit = hbit if hbit is not None else len(self.outz) - 1
+        for o in self.outz[lbit:hbit+1]:
+            for gate in o.gates:
+                if gate.out == o:
+                    o.value = gate.run()
+    
+    def readout(self):
+        return readout(self.outz)
+    
+    def reset(self):
+        for w in self.wires.values():
+            w.value = None
+        for w in self.inpx:
+            w.value = 0
+        for w in self.inpy:
+            w.value = 0
+    
+    def setx(self, n):
+       setval(n, self.inpx)
+    
+    def sety(self, n):
+       setval(n, self.inpy)
+    
+
+    def run_with(self, x, y, lbit=0, hbit=None):
+        self.reset()
+        self.setx(x)
+        self.sety(y)
+        self.run()
+        return self.readout()
+    
+    def check_bit(self, bit):
+        #print(':: checking bit:', bit)
+        try:
+            for x, y, r in ((0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 2)):
+                n = self.run_with(x*(2**bit), y*(2**bit), lbit=bit, hbit=bit+1)
+                # print('  ')
+                # print('  :: (expected) {} + {} = {}'.format(x, y, r))
+                # print('  :: actual: {} + {} = {}'.format(x*(2**bit), y*(2**bit), n))
+                n = (n & (3<<bit))>>bit
+                # print('  ::    after shift:', n)
+                # print('  :: ', [str(i.value or 0) for i in self.inpx])
+                # print('  :: ', [str(i.value or 0) for i in self.inpy])
+                # print('  :: ', [str(i.value or 0) for i in self.outz])
+                if n != r:
+                    return False
+            return True
+        except Exception as e:
+            #print('error:', e)
+            return False
+    
+    def swap_gates(self, g1, g2):
+        g1_out = g1.out
+        g2_out = g2.out
+        # fix back-refs
+        g1_out.gates = g1_out.gates.difference({g1}).union({g2})
+        g2_out.gates = g2_out.gates.difference({g2}).union({g1})
+        # swap outputs
+        g1.out = g2_out
+        g2.out = g1_out
+    
+    def _gate_by_name(self, gid):
+        for g in self.gates:
+            if str(g) == gid:
+                return g
+        raise Exception('no gate ' + gid)
+
+    def swap_gates_by_name(self, g1, g2):
+        self.swap_gates(self._gate_by_name(g1), self._gate_by_name(g2))
+    
+    def gates_up_to(self, bit):
+        gates = set()
+
+        q = []
+        for o in self.outz[0:bit+1]:
+            for g in o.gates:
+                if g not in q:
+                    q.append(g)
+        
+        while len(q):
+            gate = q[0]
+            q = q[1:]
+            if gate in gates:
+                continue
+            gates.add(gate)
+            for wire in (gate.in1, gate.in2):
+                for g in wire.gates:
+                    if g in gates or g == gate:
+                        continue
+                    q.append(g)
+
+        return gates
+    
+    def self_test(self):
+        max_bits = len(self.inpx)
+        print('Self test (max bits {})'.format(max_bits))
+        for bit in range(max_bits):
+            if not self.check_bit(bit):
+                print(' - failed at bit:', bit)
+                return False
+        print('- per bit test passed')
+        # Test with a couple of random numbers for good measure
+        for i in range(50):
+            x = randint(0, 2**max_bits)
+            y = randint(0, 2**max_bits)
+            expected = x+y
+            result = self.run_with(x, y)
+            if expected != result:
+                print(' - failed test {} + {}: expected {} but got {}'.format(x, y, expected, result))
+                return False
+        print(' * Test passed.')
+        return True
+    
+    def readout_raw(self):
+        return '\n'.join([
+            'X:  ' + ''.join(reversed([str(i.value or 0) for i in self.inpx])),
+            'Y:  ' + ''.join(reversed([str(i.value or 0) for i in self.inpy])),
+            'Z: ' + ''.join(reversed([str(i.value or 0) for i in self.outz])),
+        ])
+    
+    def dot_file(self, fn, marked=None):
         with open(fn, mode='w') as f:
             f.write('digraph G {\n')
+            # Write nodes
 
-            for vx in self.vertices.values():
-                f.write('{} [label="{}"];\n'.format(vx.id, vx.label))
-
-            for eg in self.edges.values():
-                f.write('{} -> {} [label="{}"];\n'.format(eg.v1.id, eg.v2.id, eg.label))
-
-            f.write('}\n')
-    
-    def get_input_vertices(self, iop):
-        vertices = []
-        for vn, v in self.vertices.items():
-            if re.match(r'^{}\d+_input$'.format(iop), vn):
-                vertices.append(v)
-        return vertices
-
-    def get_output_vertices(self):
-        vertices = []
-        for vn, v in self.vertices.items():
-            if re.match(r'^z\d+_output$', vn):
-                vertices.append(v)
-        return vertices
-    
-    def calculate(self, x=None, y=None):
-        values = {}
-
-        def calculate_for(node):
-            if node in values:
-                return values[node]
-            child_node_values = []
-            for edg in node.in_edges:
-                v = calculate_for(edg.v1)
-                child_node_values.append(v)
-            if len(child_node_values) == 1:
-                values[node] = child_node_values[0]
-                return child_node_values[0]
-            elif len(child_node_values) != 2:
-                print(child_node_values)
-                print(node.id)
-                raise Exception('more than two in_edges to: {}'.format(node))
-            a, b = child_node_values
-            result = None
-            if node.value == 'AND':
-                result = 1 if a and b else 0
-            elif node.value == 'OR':
-                result = 1 if a or b else 0
-            elif node.value == 'XOR':
-                result = 1 if a != b else 0
-            else:
-                raise Exception('unknown op: {}'.format(node.value))
-
-            values[node] = result
-            return result
-        
-        for i, n in enumerate(self.get_input_vertices('x')):
-            values[n] = n.value if x is None else (1 if (x & (2**i)) else 0)
-        
-        for i, n in enumerate(self.get_input_vertices('y')):
-            values[n] = n.value if y is None else (1 if (y & (2**i)) else 0)
-
-        outputs = sorted(self.get_output_vertices(), key=lambda n: n.id)
-        result = 0
-        for i,n in enumerate(outputs):
-            result += (2**i) * calculate_for(n)
-        return result
-    
-    def get_reachable_inv(self, n):
-        q = [n]
-        reachable = set()
-
-        while len(q):
-            n = q[0]
-            q = q[1:]
-            if n in reachable:
-                continue
-            reachable.add(n)
-            for e in n.in_edges:
-                if e.v1 in reachable:
-                    continue
-                q.append(e.v1)
-        
-        return reachable
-    
-    def swap(self, a, b):
-        a_out_edges = a.out_edges
-        a.out_edges = b.out_edges
-        b.out_edges = a_out_edges
-
-        for e in a.out_edges:
-            e.v1 = a
-        for e in b.out_edges:
-            e.v1 = b
-
-
-
-
-def get_io(ast, t):
-    result = []
-    for key, v in ast.items():
-        if key[0] == t:
-                result.append(key)
-    return sorted(result)
-
-
-def to_graph(ast):
-    xinputs = get_io(ast, 'x')
-    yinputs = get_io(ast, 'y')
-    zouts = get_io(ast, 'z')
-
-    g = G()
-
-
-    def _get_vx(k):
-        if k in xinputs + yinputs:
-            return g.vertices['{}_input'.format(k)]
-        if k in zouts:
-            return g.vertices['{}_output'.format(k)]
-        return g.vertices[k]
-
-    for i in xinputs + yinputs:
-        v = V('{}_input'.format(i), i, 'input', value=ast[i][1])
-        g.add_vertex(v)
-    
-    for i in zouts:
-        v = V('{}_output'.format(i), i, 'output')
-        g.add_vertex(v)
-    
-    for key, v in ast.items():
-        if v[0] == 'value':
-            continue
-        _, a, op, b = v
-        vx = V(key, op, 'gate', value=op)
-        g.add_vertex(vx)
-    
-    for key, v in ast.items():
-        if v[0] == 'value':
-            continue
-        _, a, op, b = v
-        gate_vx = g.vertices[key]
-        a_vx = _get_vx(a)
-        b_vx = _get_vx(b)
-        g.add_edge(a_vx, gate_vx, (a, key), '{}->{}'.format(a, key))
-        g.add_edge(b_vx, gate_vx, (b, key), '{}->{}'.format(b, key))
-        if key in zouts:
-            z_vx = _get_vx(key)
-            g.add_edge(gate_vx, z_vx, (key, key), key)
-
-    return g
-
-
-# --------
-
-def part2(ast):
-    reached = {}
-    for n in ast.keys():
-        
-        if n[0] == 'z':
-            reached[n] = get_reachable(n, ast)
-    g = to_graph(ast)
-    print(g.calculate())
-
-    # Sanity checks
-    # inputs should connect to two gates - one XOR and one AND gate
-    for n in g.get_input_vertices('x') + g.get_input_vertices('y'):
-        assert len(n.out_edges) == 2
-
-    wrong_wires = []
-
-    # Inputs must connect to exactly one XOR and exactly one AND gate
-    for n in g.get_input_vertices('x') + g.get_input_vertices('y'):
-        wire1, wire2 = n.out_edges
-        w1, w2 = wire1.v2, wire2.v2
-
-        if w1.type != 'gate':
-            wrong_wires.append(wire1)
-            continue
-        if w2.type != 'gate':
-            wrong_wires.append(wire2)
-            continue
-        
-        gates_types_ok = True
-        if w1.value not in ('XOR', 'AND'):
-            wrong_wires.append(wire1)
-            gates_types_ok = False
-        if w2.value not in ('XOR', 'AND'):
-            wrong_wires.append(wire2)
-            gates_types_ok = False
-        if gates_types_ok and w1.value == w2.value:
-            gates_types_ok = False
-            if w1.value == 'XOR':
-                wrong_wires.append(wire2)
-            else:
-                wrong_wires.append(wire1)
-        xor_gate = w1 if w1.value == 'XOR' else (w2 if w2.value == 'XOR' else None)
-        if xor_gate:
-            # must connect to exactly two inputs
-            if len(xor_gate.in_edges) == 2:
-                in1, in2 = xor_gate.in_edges
-                if not in1.v1.id.endswith('_input'):
-                    wrong_wires.append(in1)
-                if not in2.v1.id.endswith('_input'):
-                    wrong_wires.append(in2)
-                if in1.v1 == in2.v1:
-                    print('CANNOT INP FROM SAME INPUT!')
-                    wrong_wires.append(in1)
-                    wrong_wires.append(in2)
-            else:
-                print('WRONG NUMBER OF IN TO XOR')
-        and_gate = w1 if w1.value == 'AND' else (w2 if w2.value == 'AND' else None)
-
-        if and_gate:
-            # must connect to exactly two inputs
-            if len(xor_gate.in_edges) == 2:
-                in1, in2 = xor_gate.in_edges
-                if not in1.v1.id.endswith('_input'):
-                    wrong_wires.append(in1)
-                if not in2.v1.id.endswith('_input'):
-                    wrong_wires.append(in2)
-                if in1.v1 == in2.v1:
-                    print('CANNOT INP FROM SAME INPUT!')
-                    wrong_wires.append(in1)
-                    wrong_wires.append(in2)
-            else:
-                print('WRONG NUMBER OF IN TO AND')
-        
-    
-    print('wrong wires:', wrong_wires)
-    g.to_dot_file('circuit.dot')
-
-    def _check_addition_at_bit(n):
-        for x in [0, 2**n]:
-            for y in [0, 2**n]:
-                try:
-                    z = g.calculate(x, y)
-                    exp = x+y
-                    if exp != z:
-                        print('Failure at bit {} - expected {}, but got {}'.format(n, exp, z))
-                        return False
-                except RecursionError:
-                    # circular circuit
-                    return False
-        return True
-
-    
-
-    outs = g.get_output_vertices()
-    swapped = set()
-    def ordp(a, b):
-        return (a, b) if a < b else (b, a)
-
-    while True:
-        print('----')
-        failure_on_bits = []
-
-        for i in range(len(g.get_input_vertices('x'))):
-            print('checking addition for bit:', i)
-            if not _check_addition_at_bit(i):
-                failure_on_bits.append(i)
-        print('Failure on bits:', failure_on_bits)
-        if not len(failure_on_bits):
-            break
-
-        successful = {}
-        for i in failure_on_bits:
-            print('Failure on:', outs[i])
-            potentials = [n for n in g.get_reachable_inv(outs[i]).union(g.get_reachable_inv(outs[i+1])).union(g.get_reachable_inv(outs[i-1])).difference(g.get_reachable_inv(outs[i-2])) if n.type == 'gate']
-            print('  - potential:',len(potentials),  potentials)
+            # first, nodes for input and outputs
+            for w in self.inpx:
+                f.write('{} [label="{}", fillcolor=aquamarine, style=filled];\n'.format(w.name, w.name))
+            for w in self.inpy:
+                f.write('{} [label="{}", fillcolor=chartreuse, style=filled];\n'.format(w.name, w.name))
+            for w in self.outz:
+                f.write('{} [label="{}", fillcolor=darkgoldenrod1, style=filled];\n'.format(w.name, w.name))
             
-            from itertools import combinations
-
-            for (a, b) in combinations(potentials, 2):
-                g.swap(a, b)
-
-                if _check_addition_at_bit(i):
-                    print('  - success with:', (a, b))
-                    successful[i] = successful.get(i, [])
-                    successful[i].append((a, b))
-                g.swap(a, b) # swap back, check with other pair
-
-        print('Success:', successful)
-        print(len(successful))
-        print('success at bits:', successful.keys())
-        input()
-
-        from itertools import product
-
-        def in_group(pair, group):
-            a, b = pair
-            for pp in group:
-                if a in pp or b in pp:
-                    return True
-            return False
-
-
-        for possible in product(*list(successful.values())):
-            # merge
-            pairs_groups = []
-            print(" ** possible:", possible)
-            for p in possible:
-                added = False
-                for group in pairs_groups:
-                    if in_group(p, group):
-                        group.append(p)
-                        added = True
-                        break
-
-                # not in any group - append in new group
-                if not added:
-                    pairs_groups.append([p])
-            print(pairs_groups)
-            #input('...')
-            # if len(pairs_groups) != 4:
-            #     continue # not a solution
-            for pairs in product(*pairs_groups):
-                print('Pairs to test:', pairs)
-                g = to_graph(ast)
-                for p in pairs:
-                    a, b = p
-                    g.swap(a, b)
-                
-                # test all bits if it works:
-                is_solution = True
-                for i in range(len(g.get_input_vertices('x'))):
-                    if not _check_addition_at_bit(i):
-                        is_solution = False
-                        break
-                
-                if is_solution:
-                    print('Solution! Yay!')
-                    print(pairs)
-                    result = []
-                    for a, b in pairs:
-                        result.append(a.id)
-                        result.append(b.id)
-                    
-                    # do a final check
-                    print(' -- Final check --')
-                    g = to_graph(ast)
-                    for a, b in pairs:
-                        g.swap(a, b)
-                        print(' - swapped: ', a, '<->', b)
-                    print(' * checking with powers of 2')
-                    xinps = g.get_input_vertices('x')
-                    for i in range(len(xinps)):
-                        for xx, yy in product((0,1), (0,1)):
-                            x = xx*(2**i)
-                            y = yy*(2**i)
-                            r = g.calculate(x, y)
-                            print(x, '+', y, '=', r, '; correct=', x+y)
-                            assert r == (x+y)
-                    
+            # Then all gates
+            for g in self.gates:
+                gk = str(g)
+                color = {
+                    'XOR': 'cadetblue1',
+                    'AND': 'pink',
+                    'OR': 'beige',
+                    'marked': 'deeppink',
+                }
+                f.write('{} [label="{}", fillcolor={}, style=filled];\n'.format(gk, gk, color['marked'] if marked and gk in marked else color[g.op]))
+            
+            # write edges
+            seen = set()
+            for g in self.gates:
+                for w in (g.in1, g.in2):
+                    if isinstance(w, InputWire):
+                        f.write('{} -> {} [label="{}"];\n'.format(w.name, str(g), w.name))
+                    else:
+                        for gg in w.gates:
+                            if gg == g:
+                                continue
+                            # if (str(gg), str(g)) in seen:
+                            #     continue
+                            # seen.add((str(gg), str(g)))
+                            if gg.out != w:
+                                continue
+                            f.write('{} -> {} [label="{}"];\n'.format(str(gg), str(g), w.name))
+                if isinstance(g.out, InputWire):
+                    f.write('{} -> {} [label="{}"];\n'.format(str(g), g.out.name, g.out.name))
+            f.write('}\n')
 
 
-                    return ','.join(sorted(result))
-                # swap back
-                for p in pairs:
-                    a, b = p
-                    g.swap(a, b)
-        return
+def readout(wires):
+    n = 0
+    for i, w in enumerate(wires):
+        n += (2**i)*(w.value or 0)
+    return n
 
-    
-    # sketch of solution approach:
+
+def setval(n, wires):
+    mask = 1
+    i = 0
+    while n:
+        if i >= len(wires):
+            raise Exception('overflow')
+        wires[i].value = n & mask
+        i += 1
+        n >>= 1
+
+
+def part1(circuit):
+    circuit.run()
+    return circuit.readout()
+
+def part2(circuit):
     '''
-    def check_at_bit(i):
-        # all bits before i are set correctly
-        ok_gates = graph.gates(i-1)
-        
-        curr_bit = i
-        while not ok:
-            curr_gates = graph.gates(curr_bit) - ok_gates
-            # try swapping a pair in the gates
-            for pair in choose_2_of_gates(curr_gates):
-                graph.swap(pair)
-                
-                test graph at bit i
-                if correct:
-                    return pair
-                graph.swap(pair) # swap back
-                # conitnue with the next pair
-            # if here, no pair was found so expand search to next bit gates
-            curr_bit += 1
-            if curr_bit > length of output wires:
-                raise Exception('we cannot fix the bit at', i)
-    
-    # start at bit 0, then try to fix all bits one by one
-    bit = 0
-    swapped = []
-    while bit <= leght of output bits:
-        pair = check_at_bit(bit)
-        swapped.append(pair)
-    return swapped
+    x_i, y_i -> same XOR gate
+        XOR gate -> XOR_2 gate -> z_i
+            XOR_2 gate feeds from OR gate
+            
+    x_i, y_i -> xame AND gate
+        AND gate goes to OR gate
+            OR -> XOR -> z_(i+1)
+    z outputs are output from XOR gate, except the last one (final overflow)
     '''
-    
-    result = []
-    for (a, b) in swapped:
-        result.append(a.id)
-        result.append(b.id)
-    
-    return ','.join(sorted(result))
+    # for bit in range(len(circuit.inpx)):
+    #     ok = circuit.check_bit(bit)
+    #     print('Check bit ', bit, " -> ", ok)
+    #     if not ok:
+    #         input('...')
+    faulty_gates = set()
 
-#print('Part 1:', part1(read_input('input')))
-#print('Part 2:', part2(read_input('input')))
-#part2(read_input('day-24-crossed-wires/input'))
+    # Rule: z outputs are output from XOR gate, except the last one (final overflow)
+    for zw in circuit.outz[:-1]:
+        if len(zw.gates) != 1:
+            print(zw.name, 'has', len(sw.gates))
+            raise Exception('error')
+        gate = list(zw.gates)[0]
+        if gate.op != 'XOR':
+            faulty_gates.add(gate)
+
+    # Rule: XOR gate is connected to either both input wires or OR and XOR gates
+    for gate in circuit.gates:
+        if gate.op == 'XOR':
+            if isinstance(gate.out, InputWire) and gate.out.name[0] == 'z':
+                continue # normal output to Z
+            # It must output to exactly 1 AND and 1 XOR
+            out_gates = [g for g in gate.out.gates if g != gate]
+            if tuple(sorted([g.op for g in out_gates])) != ('AND', 'XOR'):
+                faulty_gates.add(gate)
+        elif gate.op == 'OR':
+            # final OR gate just points to the last output wire
+            if isinstance(gate.out, InputWire) and gate.out == circuit.outz[-1]:
+                # OK, points to the last one
+                continue
+            
+            # OR points to AND and XOR
+            out_gates = [g for g in gate.out.gates if g != gate]
+            if tuple(sorted([g.op for g in out_gates])) != ('AND', 'XOR'):
+                faulty_gates.add(gate)
+        elif gate.op == 'AND':
+            # AND gates must output to OR gate
+            out_gates = [g for g in gate.out.gates if g != gate]
+            if len(out_gates) != 1:
+                faulty_gates.add(gate)
+                continue
+            if out_gates[0].op != 'OR':
+                faulty_gates.add(gate)
+    
+    print('Faulty gates:', faulty_gates)
+
+    faulty_wires = set()
+    for g in faulty_gates:
+        faulty_wires.add(g.out)
+    print('Faulty wires:', faulty_wires)
+
+    circuit.dot_file('./circuit_orig.dot', marked=set([str(g) for g in faulty_gates]))
+    # Sanity check
+    assert len(faulty_gates) == 8
+    assert len(faulty_wires) == 8
+
+    def find_gate(gid):
+        for g in circuit.gates:
+            if str(g) == gid:
+                return g
+        raise Exception(gid)
+
+    # Dirty check
+    # faulty_wires = set()
+    # for g1, g2 in (('XOR350', 'OR282'), ('AND382', 'XOR231'), ('XOR360', 'AND342'), ('XOR411', 'AND263')):
+    #     circuit.swap_gates(find_gate(g1), find_gate(g2))
+    #     faulty_wires.add(find_gate(g1).out)
+    #     faulty_wires.add(find_gate(g2).out)
+
+
+    # #circuit.dot_file('./circuit_swapped.dot', marked=set([str(g) for g in faulty_gates]))
+
+
+    
+
+    
+    valid_configs = []
+    q = [(0, [])]
+    while len(q):
+        bit, circuit_swaps = q[0]
+        circuit = read_input('input')
+        q = q[1:]
+        for g1, g2 in circuit_swaps:
+            circuit.swap_gates_by_name(g1, g2)
+        if bit == len(circuit.inpx) - 1 or len(circuit_swaps) == 4:
+            if len(circuit_swaps) == 4:
+                print('Checking swaps:', circuit_swaps)
+                if circuit.self_test():
+                    print('Valid configuration:', circuit_swaps)
+                    valid_configs.append(circuit_swaps)
+            continue
+
+        while bit < len(circuit.inpx) - 1 and circuit.check_bit(bit):
+            bit += 1
+        to_bit = bit
+        while to_bit < len(circuit.inpx) - 1 and not circuit.check_bit(to_bit):
+            to_bit += 1
+        print('faulty bits:', bit, '->', to_bit, '; swaps->', circuit_swaps)
+        while to_bit < len(circuit.inpx):
+            ok_gates = circuit.gates_up_to(bit-1)
+            to_check = circuit.gates_up_to(to_bit).difference(ok_gates)
+            if to_bit - bit >= 3:
+                print("Too much, bail")
+                break
+            for g1, g2 in combinations(to_check, 2):
+                circuit.swap_gates_by_name(str(g1), str(g2))
+                all_bits_ok = True
+                for bb in range(0, to_bit+1):
+                    if not circuit.check_bit(bb):
+                        all_bits_ok = False
+                        break
+                if all_bits_ok:
+                    print('Gate swap: ', g1, g2)
+                    q.append([to_bit, circuit_swaps + [(str(g1), str(g2))]])
+                # restore this swap
+                circuit.swap_gates_by_name(str(g1), str(g2))
+            to_bit += 1
+            if to_bit >= len(circuit.inpx):
+                print('Not found :(')
+        # restore circuit for next check
+        for g1, g2 in circuit_swaps:
+            circuit.swap_gates_by_name(str(g1), str(g2))
+    # faulty_wires = set()
+    # for g1, g2 in (('XOR350', 'OR282'), ('AND382', 'XOR231'), ('XOR360', 'AND342'), ('XOR411', 'AND263')):
+    #         circuit.swap_gates(find_gate(g1), find_gate(g2))
+    #         faulty_wires.add(find_gate(g1).out)
+    #         faulty_wires.add(find_gate(g2).out)
+    # print('Self test:', circuit.self_test())
+    solutions = set()
+    for valid_config in valid_configs:
+        circuit = read_input('input')
+        print('Valid config:', valid_config)
+        wires = []
+        for g1, g2 in valid_config:
+            wires.append(str(circuit._gate_by_name(g1).out))
+            wires.append(str(circuit._gate_by_name(g2).out))
+            circuit.swap_gates_by_name(g1, g2)
+        test_pass = circuit.self_test()
+        print('  * Self test:', test_pass)
+        if test_pass:
+            solution = ','.join(sorted(wires))
+            print('  * Possible option:', solution)
+            solutions.add(solution)
+    if len(solutions) == 1:
+        return solution
+    print('There are {} possible solutions, check one of these:'.format(len(solutions)))
+    for solution in solutions:
+        print(solution)
+    return ''
+
+print('Part 1:', part1(read_input('input')))
 print('Part 2:', part2(read_input('input')))

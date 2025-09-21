@@ -24,5 +24,5 @@ AdventOfCode 2024 solutions
 * [Day 21 - Keypad Conundrum :monkey: :keyboard: :robot: :keyboard: :robot: :keyboard:](./day-21-keypad-conundrum/)
 * [Day 22 - Monkey Market :monkey: :banana:](./day-22-monkey-market/)
 * [Day 23 - LAN Party :computer: :computer:](./day-23-lan-party/)
-* [Day 24 - Crossed Wires :construction:](./day-24-crossed-wires/)
+* [Day 24 - Crossed Wires :abacus: :abacus:](./day-24-crossed-wires/)
 * [Day 25 - Code Chronicle :lock: :key:](./day-25-code-chronicle/)
